@@ -1,0 +1,15 @@
+{
+    admin off
+}
+
+:80 {
+    # Proxy API requests to backend
+    handle_path /api/* {
+        reverse_proxy backend:4000
+    }
+
+    # Proxy everything else to frontend
+    handle {
+        reverse_proxy frontend:5173
+    }
+}

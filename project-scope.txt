@@ -1,0 +1,248 @@
+You are helping me build a take home project for a Fullstack / Infra Engineer role. This is not just a CRUD app. It is a simplified deployment platform similar to a mini Heroku or Vercel.
+
+Your role is to assist me as a junior engineer. Do not make architectural decisions on your own. Follow my direction and generate only what I ask for.
+
+---
+
+PROJECT GOAL
+
+Build a one page deployment pipeline system where a user can submit a Git repository or project, and the system will:
+
+1. Build the project into a container image using Railpack
+2. Run the container locally using Docker
+3. Route traffic to the running container using Caddy
+4. Stream build and deploy logs live to the frontend
+5. Show deployment status and live URL in a UI
+
+This must work end to end locally.
+
+---
+
+CORE REQUIREMENTS (MANDATORY)
+
+1. The entire system must run with:
+docker compose up
+
+No manual setup after that. Everything must boot automatically.
+
+2. Live log streaming is required:
+- Logs must stream in real time using SSE or WebSocket
+- Polling is not allowed
+- Logs must appear during build, not after
+- Logs must also be stored so users can view past logs
+
+3. Must use Railpack:
+- No handwritten Dockerfiles
+- Railpack builds the container image
+
+4. Must use Caddy:
+- Caddy is the single ingress point
+- It routes traffic to running containers
+
+5. Must include Brimble deployment feedback:
+- I will deploy something separately on Brimble
+- I will write honest feedback about the experience
+
+---
+
+TECH STACK
+
+Frontend:
+- Vite
+- TanStack Router
+- TanStack Query
+
+Backend:
+- Node.js with TypeScript (preferred)
+- Express or Fastify
+
+Database:
+- SQLite (for simplicity)
+
+Infrastructure:
+- Docker
+- Docker Compose
+- Caddy
+- Railpack
+
+---
+
+SYSTEM ARCHITECTURE
+
+Services:
+
+1. frontend
+- Single page UI
+- Form to submit Git repo
+- List of deployments
+- Status display
+- Live logs viewer using SSE
+
+2. backend
+- Handles API requests
+- Manages deployments
+- Runs build pipeline
+- Streams logs
+
+3. database
+- SQLite
+- Stores deployments and logs
+
+4. caddy
+- Reverse proxy
+- Routes incoming traffic to containers
+
+---
+
+DATA MODELS
+
+Deployment:
+- id
+- repoUrl
+- status (pending, building, deploying, running, failed)
+- imageTag
+- containerId
+- port
+- url
+- createdAt
+
+Log:
+- id
+- deploymentId
+- message
+- timestamp
+
+---
+
+API DESIGN
+
+POST /deployments
+- create a new deployment
+
+GET /deployments
+- list all deployments
+
+GET /deployments/:id
+- get single deployment
+
+GET /deployments/:id/logs/stream
+- stream logs using SSE
+
+---
+
+PIPELINE FLOW
+
+1. User submits repo
+2. Backend creates deployment (status = pending)
+3. Pipeline starts:
+- status → building
+- run Railpack build
+- capture logs in real time
+- stream logs to frontend
+- store logs in database
+4. After build:
+- status → deploying
+- run container using Docker
+- assign a port
+5. After container starts:
+- status → running
+- generate URL via Caddy routing
+6. If anything fails:
+- status → failed
+
+---
+
+LOG STREAMING
+
+- Must use Server Sent Events (SSE) or WebSockets
+- Must stream logs while the build is happening
+- Logs must also be saved for later viewing
+
+---
+
+CADDY ROUTING
+
+- Caddy acts as a reverse proxy
+- Routes traffic to containers based on path or subdomain
+
+Example:
+app-1.localhost → container on port 3001
+
+---
+
+DOCKER REQUIREMENTS
+
+- Everything must run with docker compose up
+- Services:
+- frontend
+- backend
+- caddy
+- database
+
+- No external dependencies required to test
+
+---
+
+FRONTEND REQUIREMENTS
+
+- Single page only
+- No authentication
+- Minimal UI is fine
+
+Must include:
+- Create deployment form
+- Deployment list
+- Status display
+- Live logs viewer
+
+---
+
+WHAT NOT TO BUILD
+
+- No authentication
+- No billing
+- No Kubernetes
+- No complex UI system
+- No over engineering
+
+---
+
+WHAT MATTERS MOST
+
+- End to end system works
+- Logs stream live correctly
+- Clean and understandable architecture
+- Proper pipeline flow
+- Thoughtful decisions
+
+---
+
+CODING RULES
+
+- Do not generate entire project at once
+- Only generate code for the specific part I request
+- Keep code simple and readable
+- Avoid unnecessary abstractions
+- Follow the architecture described above
+
+---
+
+SUCCESS CRITERIA
+
+If the system can:
+- start with docker compose up
+- accept a repo
+- build it using Railpack
+- run it in a container
+- route traffic via Caddy
+- stream logs live to UI
+
+Then the project is successful.
+
+---
+
+IMPORTANT
+
+Always ask for clarification if a request is unclear.
+Do not assume features that are not listed.
+Stay aligned with the architecture at all times.
