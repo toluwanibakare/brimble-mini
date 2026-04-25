@@ -37,3 +37,7 @@ token.json
 # Caddy
 caddy_data/
 caddy_config/
+
+# SQLite
+*.sqlite
+*.sqlite-journal

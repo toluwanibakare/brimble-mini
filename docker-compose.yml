@@ -19,7 +19,7 @@ services:
       - "5173:5173"
 
   caddy:
-    image: caddy:latest
+    image: public.ecr.aws/docker/library/caddy:latest
     ports:
       - "80:80"
     volumes:
