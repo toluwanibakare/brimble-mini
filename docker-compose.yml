@@ -1,35 +1,61 @@
 services:
   backend:
     build: ./backend
+    container_name: brimble-backend
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "4000:4000"
     environment:
       - NODE_ENV=development
       - PORT=4000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"] 
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - brimble
 
   frontend:
     build: ./frontend
+    container_name: brimble-frontend
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
       - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - brimble
 
   caddy:
     image: public.ecr.aws/docker/library/caddy:latest
+    container_name: brimble-caddy
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - brimble
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  brimble:
+    driver: bridge

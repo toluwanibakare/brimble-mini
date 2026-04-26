@@ -5,7 +5,10 @@ const router = Router();
 
 router.post('/', DeploymentController.createDeployment);
 router.get('/', DeploymentController.getDeployments);
-router.get('/:id', DeploymentController.getDeployment);
+
+// More specific routes MUST come before /:id
+router.get('/:id/logs/stream', DeploymentController.streamLogs);
 router.get('/:id/logs', DeploymentController.getLogs);
+router.get('/:id', DeploymentController.getDeployment);
 
 export default router;

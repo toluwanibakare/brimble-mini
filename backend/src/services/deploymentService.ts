@@ -1,5 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
+import { EventEmitter } from 'events';
 import db from '../models/db';
+
+export const logEvents = new EventEmitter();
 
 export interface Deployment {
   id: string;
@@ -49,10 +52,11 @@ export class DeploymentService {
   static addLog(deploymentId: string, message: string) {
     const statement = db.prepare('INSERT INTO logs (deploymentId, message) VALUES (?, ?)');
     statement.run(deploymentId, message);
+    logEvents.emit('new-log', { deploymentId, message, timestamp: new Date().toISOString() });
   }
 
   static getLogs(deploymentId: string): Log[] {
     const statement = db.prepare('SELECT * FROM logs WHERE deploymentId = ? ORDER BY timestamp ASC');
-    return statement.all() as Log[];
+    return statement.all(deploymentId) as Log[];
   }
 }

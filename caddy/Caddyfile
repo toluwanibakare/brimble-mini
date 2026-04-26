@@ -5,7 +5,15 @@
 :80 {
     # Proxy API requests to backend
     handle_path /api/* {
-        reverse_proxy backend:4000
+        # Disable buffering for SSE/streaming responses
+        reverse_proxy backend:4000 {
+            flush_interval 0
+            header_up Connection ""
+            header_down Connection keep-alive
+            header_down -Connection
+            header_down Transfer-Encoding
+            header_down Trailer
+        }
     }
 
     # Proxy everything else to frontend
