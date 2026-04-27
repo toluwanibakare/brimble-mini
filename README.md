@@ -54,4 +54,14 @@ Once it's running:
 - **Log Streaming Strategy:** I chose Server-Sent Events (SSE) over WebSockets because log streaming is strictly a one-way communication channel (server -> client). SSE is lighter, has built-in reconnection capabilities, and is much simpler to implement robustly for this specific use case.
 - **Process Management:** The backend manages Docker builds via spawned child processes. It also explicitly cleans up any orphaned containers (based on ID) before starting new ones to keep the Docker daemon tidy during repeated deployments.
 
+## 💡 What I Would Have Done Better
+
+Given more time and a broader scope, here are a few areas I would improve or architect differently for a production-grade system:
+
+1. **Robust Container Orchestration:** Right now, the backend shells out directly to the local Docker daemon. In a real-world scenario, I would abstract this out and use Kubernetes (via the K8s API) or HashiCorp Nomad to schedule and manage the containers across a distributed cluster, ensuring high availability and proper resource allocation.
+2. **Persistent & Centralized Logging:** Storing logs in SQLite is fine for a mini-project, but for scale, I would pipe logs to a centralized logging system (like ELK stack, Datadog, or Grafana Loki). This prevents the database from bloating and makes querying massive amounts of log data much faster.
+3. **Security & Isolation (Multi-tenancy):** Currently, user code runs in standard Docker containers on the same host network. For true multi-tenant security, I would implement microVMs (like Firecracker) or use gVisor to strictly isolate user workloads and prevent container escape vulnerabilities.
+4. **Queueing System:** If multiple builds are submitted simultaneously, the backend handles them asynchronously but could overwhelm the host system. I would introduce a message broker (like RabbitMQ or Redis Pub/Sub) to queue build jobs and process them via dedicated worker nodes.
+5. **WebSocket Fallback:** While SSE is excellent for one-way streaming, adding a WebSocket fallback could be useful for environments or proxies that poorly handle long-lived HTTP connections.
+
 Thanks for taking the time to review my project. I had a lot of fun building out this pipeline!
