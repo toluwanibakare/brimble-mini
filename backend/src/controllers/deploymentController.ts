@@ -126,3 +126,13 @@ export const streamLogs = (req: Request, res: Response) => {
     }
   }
 };
+
+export const cancelDeployment = (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    DeploymentService.cancelDeployment(id);
+    res.json({ message: 'Deployment cancelled' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to cancel deployment' });
+  }
+};

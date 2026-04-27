@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 
 interface Log {
+  id?: number;
   message: string;
   timestamp: string;
 }
@@ -18,6 +19,9 @@ export const LogsViewer = ({ deploymentId, status }: LogsViewerProps) => {
   useEffect(() => {
     if (!deploymentId) return;
 
+    setLogs([]);
+    setConnected(false);
+
     const eventSource = new EventSource(`/api/deployments/${deploymentId}/logs/stream`);
 
     eventSource.onopen = () => {
@@ -26,7 +30,12 @@ export const LogsViewer = ({ deploymentId, status }: LogsViewerProps) => {
 
     eventSource.onmessage = (event) => {
       const newLog = JSON.parse(event.data);
-      setLogs((prev) => [...prev, newLog]);
+      setLogs((prev) => {
+        if (typeof newLog.id === 'number' && prev.some((log) => log.id === newLog.id)) {
+          return prev;
+        }
+        return [...prev, newLog];
+      });
     };
 
     eventSource.onerror = () => {
@@ -54,6 +63,7 @@ export const LogsViewer = ({ deploymentId, status }: LogsViewerProps) => {
     if (status === 'building' || status === 'pending') return 'Building...';
     if (status === 'deploying') return 'Deploying...';
     if (status === 'failed') return 'Build Failed';
+    if (status === 'cancelled') return 'Cancelled';
     if (status === 'running') return 'Live';
     return 'Active';
   };
@@ -61,6 +71,7 @@ export const LogsViewer = ({ deploymentId, status }: LogsViewerProps) => {
   const getStatusColor = () => {
     if (!connected) return '#f85149';
     if (status === 'failed') return '#f85149';
+    if (status === 'cancelled') return '#d29922';
     if (status === 'building' || status === 'deploying') return '#d29922';
     return '#3fb950';
   };
@@ -106,7 +117,7 @@ export const LogsViewer = ({ deploymentId, status }: LogsViewerProps) => {
             height: '8px',
             borderRadius: '50%',
             background: statusColor,
-            animation: (status === 'building' || status === 'deploying') ? 'pulse 2s infinite' : 'none',
+            animation: (status === 'building' || status === 'deploying' || status === 'pending') ? 'pulse 2s infinite' : 'none',
           }} />
           {statusLabel}
         </div>
@@ -130,20 +141,60 @@ export const LogsViewer = ({ deploymentId, status }: LogsViewerProps) => {
             <span style={{ fontStyle: 'italic' }}>Waiting for build output...</span>
           </div>
         )}
-        {logs.map((log, index) => (
-          <div key={index} style={{
-            wordBreak: 'break-all',
-            color: log.message.includes('[ERROR]') ? '#f85149' : '#c9d1d9',
-          }}>
-            <span style={{ color: '#484f58', marginRight: '10px', userSelect: 'none' }}>
-              {String(index + 1).padStart(3, ' ')}
-            </span>
-            {log.message}
-          </div>
-        ))}
+        {logs.map((log, index) => {
+          const isLast = index === logs.length - 1;
+          const isError = log.message.includes('[ERROR]') || (status === 'failed' && isLast);
+          const isHeartbeat = log.message.startsWith('... still working');
+          
+          return (
+            <div key={index} style={{
+              wordBreak: 'break-all',
+              color: isError ? '#f85149' : isHeartbeat ? '#6e7681' : '#c9d1d9',
+              marginBottom: '2px',
+              opacity: isLast ? 1 : 0.85,
+              display: 'flex',
+              gap: '12px',
+              fontStyle: isHeartbeat ? 'italic' : 'normal',
+              animation: isLast && (status === 'building' || status === 'deploying') ? 'log-entry 0.3s ease-out' : 'none',
+            }}>
+              <span style={{ 
+                color: '#484f58', 
+                minWidth: '28px', 
+                textAlign: 'right',
+                userSelect: 'none',
+                fontSize: '0.75rem',
+              }}>
+                {index + 1}
+              </span>
+              <div style={{ flex: 1, position: 'relative' }}>
+                {log.message}
+                {isLast && (status === 'building' || status === 'deploying') && (
+                  <span className="log-cursor" />
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <style>{`
+        @keyframes log-entry {
+          from { opacity: 0; transform: translateX(-4px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .log-cursor {
+          display: inline-block;
+          width: 8px;
+          height: 14px;
+          background: #58a6ff;
+          margin-left: 8px;
+          vertical-align: middle;
+          animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+          from, to { opacity: 1; }
+          50% { opacity: 0; }
+        }
         @keyframes clock-roll {
           0% { transform: rotate(0deg); }
           20% { transform: rotate(90deg); }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { LogsViewer } from './components/LogsViewer'
 
 interface DeploymentInfo {
@@ -12,7 +12,9 @@ function App() {
   const [backendStatus, setBackendStatus] = useState<string>('checking...')
   const [repoUrl, setRepoUrl] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const [activeDeployment, setActiveDeployment] = useState<DeploymentInfo | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     fetch('/api/health')
@@ -21,32 +23,102 @@ function App() {
       .catch(() => setBackendStatus('error'))
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!repoUrl) return
+  // Poll the active deployment's status so the UI stays in sync
+  useEffect(() => {
+    if (!activeDeployment) return;
 
-    setIsSubmitting(true)
+    const isTerminal = activeDeployment.status === 'running'
+      || activeDeployment.status === 'failed'
+      || activeDeployment.status === 'cancelled';
+
+    if (isTerminal) {
+      if (pollRef.current) clearInterval(pollRef.current);
+      return;
+    }
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/deployments/${activeDeployment.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setActiveDeployment(prev => prev ? { ...prev, status: data.status } : prev);
+        }
+      } catch {
+        // Silently ignore poll errors
+      }
+    }, 2000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [activeDeployment?.id, activeDeployment?.status]);
+
+  const handleDeploy = async (url: string) => {
+    if (!url) return;
+
+    setIsSubmitting(true);
     try {
       const res = await fetch('/api/deployments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repoUrl })
-      })
+        body: JSON.stringify({ repoUrl: url })
+      });
       if (res.ok) {
-        const data = await res.json()
-        setActiveDeployment(data)
-        setRepoUrl('')
+        const data = await res.json();
+        setActiveDeployment(data);
+        setRepoUrl('');
       } else {
-        alert('Failed to trigger deployment')
+        alert('Failed to trigger deployment');
       }
     } catch (err) {
-      alert('Error connecting to backend')
+      alert('Error connecting to backend');
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  const statusColor = backendStatus === 'ok' ? '#3fb950' : '#f85149'
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await handleDeploy(repoUrl);
+  };
+
+  const handleCancel = async () => {
+    if (!activeDeployment || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      const res = await fetch(`/api/deployments/${activeDeployment.id}/cancel`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error('cancel failed');
+      }
+      if (pollRef.current) clearInterval(pollRef.current);
+      setActiveDeployment(prev => prev ? { ...prev, status: 'cancelled' } : prev);
+    } catch (err) {
+      alert('Failed to cancel deployment');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleRestart = () => {
+    if (!activeDeployment) return;
+    handleDeploy(activeDeployment.repoUrl);
+  };
+
+  // Status badge helpers
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { bg: string; color: string }> = {
+      running:   { bg: 'rgba(63,185,80,0.15)',   color: '#3fb950' },
+      failed:    { bg: 'rgba(248,81,73,0.15)',    color: '#f85149' },
+      cancelled: { bg: 'rgba(210,153,34,0.15)',   color: '#d29922' },
+    };
+    return map[status] || { bg: 'rgba(210,153,34,0.15)', color: '#d29922' };
+  };
+
+  const statusColor = backendStatus === 'ok' ? '#3fb950' : '#f85149';
+  const badge = activeDeployment ? getStatusBadge(activeDeployment.status) : null;
+
+  const isActive = activeDeployment?.status === 'building' || activeDeployment?.status === 'pending' || activeDeployment?.status === 'deploying';
+  const isStopped = activeDeployment?.status === 'failed' || activeDeployment?.status === 'cancelled';
 
   return (
     <div style={{
@@ -148,7 +220,7 @@ function App() {
         </div>
 
         {/* Active deployment */}
-        {activeDeployment && (
+        {activeDeployment && badge && (
           <div style={{
             background: '#161b22',
             borderRadius: '12px',
@@ -156,42 +228,113 @@ function App() {
             overflow: 'hidden',
             marginBottom: '24px',
           }}>
-            {/* Deployment info */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #30363d' }}>
               <div style={{
-                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                fontSize: '0.85rem',
-                color: '#58a6ff',
-                wordBreak: 'break-all',
-                marginBottom: '8px',
-              }}>
-                {activeDeployment.repoUrl}
-              </div>
-              <div style={{
                 display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-                fontSize: '0.78rem',
-                color: '#8b949e',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '20px',
               }}>
-                <span>ID: {activeDeployment.id.slice(0, 8)}</span>
-                <span style={{
-                  display: 'inline-block',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  background: activeDeployment.status === 'running' ? 'rgba(63,185,80,0.15)'
-                    : activeDeployment.status === 'failed' ? 'rgba(248,81,73,0.15)'
-                    : 'rgba(210,153,34,0.15)',
-                  color: activeDeployment.status === 'running' ? '#3fb950'
-                    : activeDeployment.status === 'failed' ? '#f85149'
-                    : '#d29922',
-                }}>
-                  {activeDeployment.status}
-                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                    fontSize: '0.85rem',
+                    color: '#58a6ff',
+                    wordBreak: 'break-all',
+                    marginBottom: '8px',
+                  }}>
+                    {activeDeployment.repoUrl}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    fontSize: '0.78rem',
+                    color: '#8b949e',
+                  }}>
+                    <span>ID: {activeDeployment.id.slice(0, 8)}</span>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      background: badge.bg,
+                      color: badge.color,
+                    }}>
+                      {activeDeployment.status}
+                    </span>
+                    {(activeDeployment as any).url && activeDeployment.status === 'running' && (
+                      <a 
+                        href={(activeDeployment as any).url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        style={{
+                          color: '#58a6ff',
+                          textDecoration: 'none',
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        Visit Site ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {/* Cancel button — visible during active build */}
+                  {isActive && (
+                    <button
+                      onClick={handleCancel}
+                      disabled={isCancelling}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: '1px solid #f85149',
+                        background: 'transparent',
+                        color: '#f85149',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: isCancelling ? 'not-allowed' : 'pointer',
+                        opacity: isCancelling ? 0.7 : 1,
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseOver={(e) => {
+                        if (!isCancelling) e.currentTarget.style.background = 'rgba(248,81,73,0.1)';
+                      }}
+                      onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {isCancelling ? 'Cancelling...' : 'Cancel'}
+                    </button>
+                  )}
+
+                  {/* Restart button — visible after failed or cancelled */}
+                  {isStopped && (
+                    <button
+                      onClick={handleRestart}
+                      disabled={isSubmitting}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: isSubmitting ? '#30363d' : '#238636',
+                        color: 'white',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                        transition: 'opacity 0.2s',
+                      }}
+                    >
+                      Restart
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

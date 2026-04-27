@@ -7,13 +7,19 @@
     handle_path /api/* {
         # Disable buffering for SSE/streaming responses
         reverse_proxy backend:4000 {
-            flush_interval 0
-            header_up Connection ""
-            header_down Connection keep-alive
-            header_down -Connection
-            header_down Transfer-Encoding
-            header_down Trailer
+            flush_interval -1
+            transport http {
+                compression off
+            }
         }
+    }
+
+    # Dynamic routing for apps (app-<id>.localhost)
+    @apps {
+        header_regexp host Host ^app-([a-f0-9]{8})\.localhost$
+    }
+    handle @apps {
+        reverse_proxy brimble-app-{re.host.1}:3000
     }
 
     # Proxy everything else to frontend
